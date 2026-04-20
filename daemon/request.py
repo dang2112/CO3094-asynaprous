@@ -112,13 +112,16 @@ class Request():
         self.method, self.path, self.version = self.extract_request_line(request)
         print("[Request] {} path {} version {}".format(self.method, self.path, self.version))
 
+        # Parse headers from request
+        self.headers = self.prepare_headers(request)
+
         #
         # @bksysnet Preapring the webapp hook with AsynapRous instance
         # The default behaviour with HTTP server is empty routed
         #
         # TODO manage the webapp hook in this mounting point
         #
-        
+
         if not routes == {}:
             self.routes = routes
             print("[Request] Routing METHOD {} path {}".format(self.method, self.path))
@@ -130,7 +133,8 @@ class Request():
             #
 
         self._raw_heaers = ""
-        self._raw_body =  ""
+        self._raw_body = ""
+        self.headers = self.headers or {}
         cookies = self.headers.get('cookie', '')
             #
             #  TODO: implement the cookie function here

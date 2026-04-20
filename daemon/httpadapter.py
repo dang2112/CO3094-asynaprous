@@ -112,10 +112,13 @@ class HttpAdapter:
 
         # Handle request hook
         if req.hook:
-            #
-            # TODO: handle for App hook here
-            #
-            response = ""
+            response = req.hook(req.headers, req.body or "")
+            if isinstance(response, bytes):
+                response = response
+            else:
+                response = str(response).encode()
+        else:
+            response = b"HTTP/1.1 404 Not Found\r\n\r\n"
 
         #print("[HttpAdapter] Response content {}".format(response))
         conn.sendall(response)

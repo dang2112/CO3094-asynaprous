@@ -163,12 +163,10 @@ def run_backend(ip, port, routes):
                 print("   + ('{}', '{}'): {}{}".format(key[0], key[1], isCoFunc, str(value)))
 
         if mode_async == "callback":
-            sel.register(server, selectors.EVENT_READ, (handle_client_callback, ip, port, routes))
+            server.setblocking(False)
+            sel.register(server, selectors.EVENT_READ, data=None)
 
         while True:
-            # Accept connection
-            conn, addr = server.accept()
-
             #
             #  TODO: implement the step of the client incomping connection
             #        using non-blocking communication
@@ -185,14 +183,19 @@ def run_backend(ip, port, routes):
             #            change global variable mode_async to select the mechanism
             if mode_async == "callback":
                 # Callback implementation - Event driven architecture
-                server.setblocking(False)
-
-                events = sel.select(timeout=None)
-                for key, mask in events: #handling new connection?
-                    callback, ip, port, routes = key.data
-                    callback(key.fileobj, ip, port, conn, addr, routes)
+                events = sel.select(timeout=1.0)
+                for key, mask in events:
+                    if key.data is None:
+                        try:
+                            conn, addr = server.accept()
+                            handle_client_callback(server, ip, port, conn, addr, routes)
+                        except BlockingIOError:
+                            pass
 
             else:
+                # Accept connection
+                conn, addr = server.accept()
+
                 # Baseline multi-thread implementation
                 client_thread = threading.Thread(target=handle_client, args=(ip, port, conn, addr, routes))
                 client_thread.daemon = True  #Daemon thread exits when the main program does
