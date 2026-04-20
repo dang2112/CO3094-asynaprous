@@ -112,6 +112,7 @@ class HttpAdapter:
 
         # Handle request hook
         if req.hook:
+            # TODO: app hook handling finished implementation
             response = req.hook(req.headers, req.body or "")
             if isinstance(response, bytes):
                 response = response
