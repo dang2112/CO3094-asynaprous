@@ -14,10 +14,54 @@
 daemon.request
 ~~~~~~~~~~~~~~~~~
 
-This module provides a Request object to manage and persist 
+This module provides a Request object to manage and persist
 request settings (cookies, auth, proxies).
 """
-from .dictionary import CaseInsensitiveDict
+import base64
+from .dictionary import CaseInsensitiveDict, CookieDict
+
+
+class AuthCredentials:
+    """Holds parsed authentication credentials per RFC 2617/7235."""
+
+    def __init__(self, scheme=None, username=None, password=None, realm=None):
+        self.scheme = scheme
+        self.username = username
+        self.password = password
+        self.realm = realm
+        self.params = {}
+
+    def __repr__(self):
+        return f"AuthCredentials(scheme={self.scheme}, username={self.username})"
+
+    @staticmethod
+    def from_auth_header(header_value):
+        """Parse Authorization header per RFC 2617/7235."""
+        creds = AuthCredentials()
+        if not header_value:
+            return creds
+
+        parts = header_value.split(' ', 1)
+        creds.scheme = parts[0].lower()
+        if len(parts) > 1:
+            params_str = parts[1]
+
+            if creds.scheme == 'basic':
+                try:
+                    decoded = base64.b64decode(params_str).decode('utf-8')
+                    creds.username, creds.password = decoded.split(':', 1)
+                except Exception:
+                    pass
+
+            else:
+                for param in params_str.split(','):
+                    if '=' in param:
+                        key, val = param.split('=', 1)
+                        creds.params[key.strip()] = val.strip().strip('"')
+                        if key.strip().lower() == 'realm':
+                            creds.realm = val.strip().strip('"')
+
+        return creds
 
 class Request():
     """The fully mutable "class" `Request <Request>` object,
@@ -48,6 +92,7 @@ class Request():
         "body",
         "routes",
         "hook",
+        "auth",
     ]
 
     def __init__(self):
@@ -58,7 +103,7 @@ class Request():
         #: dictionary of HTTP headers.
         self.headers = None
         #: HTTP path
-        self.path = None        
+        self.path = None
         # The cookies set used to create Cookie header
         self.cookies = None
         #: request body to send to the server.
@@ -71,6 +116,8 @@ class Request():
         self.routes = {}
         #: Hook point for routed mapped-path
         self.hook = None
+        #: Authentication credentials parsed from Authorization header
+        self.auth = None
 
     def extract_request_line(self, request):
         try:
@@ -114,6 +161,15 @@ class Request():
 
         # Parse headers from request
         self.headers = self.prepare_headers(request)
+        self.headers = self.headers or {}
+
+        # Parse cookies per RFC 6265
+        cookie_header = self.headers.get('cookie', '')
+        self.cookies = CookieDict.parse_cookie_header(cookie_header)
+
+        # Parse authentication per RFC 2617/7235
+        auth_header = self.headers.get('authorization', '')
+        self.auth = AuthCredentials.from_auth_header(auth_header)
 
         #
         # @bksysnet Preapring the webapp hook with AsynapRous instance
@@ -134,11 +190,6 @@ class Request():
 
         self._raw_heaers = ""
         self._raw_body = ""
-        self.headers = self.headers or {}
-        cookies = self.headers.get('cookie', '')
-            #
-            #  TODO: implement the cookie function here
-            #        by parsing the header            #
 
         return
 

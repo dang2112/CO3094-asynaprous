@@ -23,7 +23,7 @@ The current version supports MIME type detection, content loading and header for
 import datetime
 import os
 import mimetypes
-from .dictionary import CaseInsensitiveDict
+from .dictionary import CaseInsensitiveDict, CookieDict
 
 BASE_DIR = ""
 
@@ -117,6 +117,59 @@ class Response():
         #: The :class:`PreparedRequest <PreparedRequest>` object to which this
         #: is a response.
         self.request = None
+        self._auth_challenge = None
+
+    def set_auth_challenge(self, scheme="Basic", realm=None, params=None):
+        """Set WWW-Authenticate challenge per RFC 2617/7235.
+
+        Args:
+            scheme: Auth scheme (Basic, Digest, Bearer)
+            realm: Protected realm for Basic/Digest
+            params: Additional params dict
+        """
+        parts = [scheme]
+        if realm:
+            parts.append(f'realm="{realm}"')
+        if params:
+            for k, v in params.items():
+                parts.append(f'{k}="{v}"')
+        self._auth_challenge = ", ".join(parts)
+        self.headers['WWW-Authenticate'] = self._auth_challenge
+
+    def set_cookie(self, name, value, path="/", domain=None,
+                   max_age=None, secure=False, http_only=True):
+        """Set a cookie per RFC 6265."""
+        cookie_str = CookieDict().build_set_cookie_header(
+            name, value, path, domain, max_age, secure, http_only
+        )
+        self.headers['Set-Cookie'] = cookie_str
+
+    def build_unauthorized(self, realm=None):
+        """Build 401 Unauthorized response with WWW-Authenticate challenge."""
+        self.status_code = 401
+        self.reason = "Unauthorized"
+        self.set_auth_challenge(scheme="Basic", realm=realm or "Protected Area")
+        body = b"401 Unauthorized"
+        header = self._build_header_string(len(body), "text/plain")
+        return header + body
+
+    def _build_header_string(self, content_length, content_type):
+        """Build formatted HTTP response headers."""
+        lines = [
+            f"HTTP/1.1 {self.status_code} {self.reason}",
+            f"Content-Type: {content_type}",
+            f"Content-Length: {content_length}",
+            f"Date: {datetime.datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')}",
+            "Cache-Control: no-cache",
+            "Connection: close",
+        ]
+        if 'WWW-Authenticate' in self.headers:
+            lines.append(f"WWW-Authenticate: {self.headers['WWW-Authenticate']}")
+        if 'Set-Cookie' in self.headers:
+            lines.append(f"Set-Cookie: {self.headers['Set-Cookie']}")
+        lines.append("")
+        lines.append("")
+        return "\r\n".join(lines).encode('utf-8')
 
 
     def get_mime_type(self, path):
