@@ -178,7 +178,7 @@ class Request():
         # TODO manage the webapp hook in this mounting point
         #
 
-        if not routes == {}:
+        if routes:
             self.routes = routes
             print("[Request] Routing METHOD {} path {}".format(self.method, self.path))
             self.hook = routes.get((self.method, self.path))

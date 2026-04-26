@@ -20,7 +20,7 @@ based on incoming requests.
 
 The current version supports MIME type detection, content loading and header formatting
 """
-import datetime
+from datetime import datetime, timezone, timedelta
 import os
 import mimetypes
 from .dictionary import CaseInsensitiveDict, CookieDict
@@ -112,7 +112,7 @@ class Response():
         self.cookies = CaseInsensitiveDict()
 
         #: The amount of time elapsed between sending the request
-        self.elapsed = datetime.timedelta(0)
+        self.elapsed = timedelta(0)
 
         #: The :class:`PreparedRequest <PreparedRequest>` object to which this
         #: is a response.
@@ -159,7 +159,7 @@ class Response():
             f"HTTP/1.1 {self.status_code} {self.reason}",
             f"Content-Type: {content_type}",
             f"Content-Length: {content_length}",
-            f"Date: {datetime.datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')}",
+            f"Date: {datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')}",
             "Cache-Control: no-cache",
             "Connection: close",
         ]
