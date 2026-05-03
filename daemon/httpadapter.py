@@ -83,47 +83,118 @@ class HttpAdapter:
         #: Response
         self.response = Response()
 
+    # def handle_client(self, conn, addr, routes):
+    #     """
+    #     Handle an incoming client connection.
+
+    #     This method reads the request from the socket, prepares the request object,
+    #     invokes the appropriate route handler if available, builds the response,
+    #     and sends it back to the client.
+
+    #     :param conn (socket): The client socket connection.
+    #     :param addr (tuple): The client's address.
+    #     :param routes (dict): The route mapping for dispatching requests.
+    #     """
+
+    #     # Connection handler.
+    #     self.conn = conn        
+    #     # Connection address.
+    #     self.connaddr = addr
+    #     # Request handler
+    #     req = self.request
+    #     # Response handler
+    #     resp = self.response
+
+    #     # Handle the request
+    #     msg = conn.recv(1024).decode()
+    #     req.prepare(msg, routes)
+    #     print("[HttpAdapter] Invoke handle_client connection {}".format(addr))
+
+    #     # Handle request hook
+    #     if req.hook:
+    #         # TODO: app hook handling finished implementation
+    #         response = req.hook(req.headers, req.body or "")
+    #         if isinstance(response, bytes):
+    #             response = response
+    #         else:
+    #             response = str(response).encode()
+    #     else:
+    #         response = b"HTTP/1.1 404 Not Found\r\n\r\n"
+
+    #     #print("[HttpAdapter] Response content {}".format(response))
+    #     conn.sendall(response)
+    #     conn.close()
+
     def handle_client(self, conn, addr, routes):
-        """
-        Handle an incoming client connection.
+        import json
+        try:
+            request_data = b""
+            # Đọc Header
+            while b"\r\n\r\n" not in request_data:
+                chunk = conn.recv(1024)
+                if not chunk: break
+                request_data += chunk
 
-        This method reads the request from the socket, prepares the request object,
-        invokes the appropriate route handler if available, builds the response,
-        and sends it back to the client.
+            if not request_data: return
+            headers_part, temp_body = request_data.split(b"\r\n\r\n", 1)
 
-        :param conn (socket): The client socket connection.
-        :param addr (tuple): The client's address.
-        :param routes (dict): The route mapping for dispatching requests.
-        """
+            # Tính toán độ dài Body
+            content_length = 0
+            headers_str = headers_part.decode('utf-8', errors='ignore')
+            for line in headers_str.split('\r\n'):
+                if line.lower().startswith('content-length:'):
+                    content_length = int(line.split(':')[1].strip())
 
-        # Connection handler.
-        self.conn = conn        
-        # Connection address.
-        self.connaddr = addr
-        # Request handler
-        req = self.request
-        # Response handler
-        resp = self.response
+            # Đọc cho bằng hết Body
+            body_data = temp_body
+            while len(body_data) < content_length:
+                chunk = conn.recv(4096)
+                if not chunk: break
+                body_data += chunk
 
-        # Handle the request
-        msg = conn.recv(1024).decode()
-        req.prepare(msg, routes)
-        print("[HttpAdapter] Invoke handle_client connection {}".format(addr))
+            full_request_str = headers_str + "\r\n\r\n" + body_data.decode('utf-8', errors='ignore')
+            self.routes = routes
+            self.request.prepare(full_request_str, self.routes)
 
-        # Handle request hook
-        if req.hook:
-            # TODO: app hook handling finished implementation
-            response = req.hook(req.headers, req.body or "")
-            if isinstance(response, bytes):
-                response = response
+            # Thực thi Hook (Gọi API)
+            if hasattr(self.request, 'hook') and self.request.hook:
+                method = str(self.request.method).upper().strip()
+                if method == 'OPTIONS':
+                    response_dict = ""
+                else:
+                    # BÍ QUYẾT Ở ĐÂY: Bỏ qua Body của Framework, tự tay ép Body chuẩn vào hàm!
+                    safe_body = body_data.decode('utf-8', errors='ignore')
+                    response_dict = self.request.hook(self.request.headers, safe_body)
+                
+                # Đóng gói Response
+                if isinstance(response_dict, dict):
+                    body_str = json.dumps(response_dict)
+                    content_type = "application/json"
+                else:
+                    body_str = str(response_dict)
+                    content_type = "text/html" if "<html" in body_str else "text/plain"
+
+                body_bytes = body_str.encode('utf-8')
+                res_headers = [
+                    "HTTP/1.1 200 OK",
+                    f"Content-Type: {content_type}; charset=utf-8",
+                    f"Content-Length: {len(body_bytes)}",
+                    "Access-Control-Allow-Origin: *",
+                    "Access-Control-Allow-Methods: POST, GET, OPTIONS",
+                    "Access-Control-Allow-Headers: Content-Type",
+                    "Connection: close",
+                    "\r\n"
+                ]
+                
+                response_data = ("\r\n".join(res_headers)).encode('utf-8') + body_bytes
             else:
-                response = str(response).encode()
-        else:
-            response = b"HTTP/1.1 404 Not Found\r\n\r\n"
+                response_data = b"HTTP/1.1 404 Not Found\r\n\r\n404 Not Found"
 
-        #print("[HttpAdapter] Response content {}".format(response))
-        conn.sendall(response)
-        conn.close()
+            conn.sendall(response_data)
+        except Exception as e:
+            print(f"[HttpAdapter] Lỗi: {e}")
+        finally:
+            conn.close()
 
     async def handle_client_coroutine(self, reader, writer):
         """
