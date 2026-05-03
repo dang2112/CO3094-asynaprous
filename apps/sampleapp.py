@@ -124,8 +124,7 @@ def send_peer(headers, body):
     
     channel = data.get('channel', 'general')
     if channel not in chat_channels: chat_channels[channel] = []
-    
-    # Radar theo dõi tin nhắn: In thật to ra Terminal!
+  
     print(f"💬 [P2P RECEIVER] Có tin nhắn từ '{data.get('sender')}' vào kênh #{channel}: {data.get('message')}")
     
     chat_channels[channel].append({

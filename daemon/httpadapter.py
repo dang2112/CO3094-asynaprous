@@ -145,7 +145,6 @@ class HttpAdapter:
                 if line.lower().startswith('content-length:'):
                     content_length = int(line.split(':')[1].strip())
 
-            # Đọc cho bằng hết Body
             body_data = temp_body
             while len(body_data) < content_length:
                 chunk = conn.recv(4096)
@@ -162,7 +161,7 @@ class HttpAdapter:
                 if method == 'OPTIONS':
                     response_dict = ""
                 else:
-                    # BÍ QUYẾT Ở ĐÂY: Bỏ qua Body của Framework, tự tay ép Body chuẩn vào hàm!
+                    #Bỏ qua Body của Framework, tự tay ép Body chuẩn vào hàm!
                     safe_body = body_data.decode('utf-8', errors='ignore')
                     response_dict = self.request.hook(self.request.headers, safe_body)
                 

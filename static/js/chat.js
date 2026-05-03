@@ -5,7 +5,7 @@ let myInfo = { username: "", ip: "", port: "" };
 let trackerUrl = "http://127.0.0.1:8000"; // Địa chỉ Server Trung Tâm (Tracker)
 let activePeers = {};
 let currentChannel = "general";
-let channelReadCounts = { "general": 0, "study-group": 0 };// Biến đếm để kích hoạt thông báo tin nhắn mới
+let channelReadCounts = { "general": 0, "study-group": 0 };
 let lastRenderedChannel = "";
 
 // ==========================================
@@ -28,11 +28,9 @@ async function login() {
             body: JSON.stringify(myInfo)
         });
 
-        // Ẩn form đăng nhập, hiện giao diện chat
         document.getElementById("loginModal").style.display = "none";
         document.getElementById("userInfo").innerText = `👤 ${myInfo.username} (Port: ${myInfo.port})`;
         
-        // Khởi động các vòng lặp chạy ngầm để đồng bộ dữ liệu liên tục
         setInterval(fetchPeers, 3000);    // Mỗi 3s cập nhật danh sách IP 1 lần
         setInterval(fetchMessages, 1000); // Mỗi 1s lấy tin nhắn P2P 1 lần
         
@@ -40,7 +38,7 @@ async function login() {
         fetchMessages();
 
     } catch (err) {
-        alert("Lỗi kết nối tới Tracker Server ở cổng 8000. Hãy kiểm tra lại Terminal!");
+        alert("Lỗi kết nối tới Tracker Server ở cổng 8000.");
     }
 }
 
@@ -71,7 +69,6 @@ async function fetchMessages() {
         
         let hasNewMsgInActiveChannel = false;
         
-        // KIỂM TRA: Xem người dùng có vừa bấm chuyển sang kênh khác không?
         let forceRender = (lastRenderedChannel !== currentChannel); 
 
         for (const [chName, messages] of Object.entries(channelsData)) {
@@ -81,15 +78,12 @@ async function fetchMessages() {
             const unread = totalMsgs - channelReadCounts[chName];
 
             if (chName === currentChannel) {
-                // TRƯỜNG HỢP 1: Kênh đang mở trên màn hình
-                // BÍ QUYẾT: Vẽ lại màn hình khi CÓ TIN NHẮN MỚI hoặc VỪA ĐỔI KÊNH
                 if (unread > 0 || forceRender) {
                     renderMessages(messages);
                     channelReadCounts[chName] = totalMsgs;
                     if (unread > 0) hasNewMsgInActiveChannel = true;
                 }
             } else {
-                // TRƯỜNG HỢP 2: Kênh đang ẩn (Cập nhật Ô đỏ)
                 let badge = document.getElementById(`badge-${chName}`);
                 if (badge && unread > 0) {
                     badge.innerText = unread;
@@ -98,7 +92,6 @@ async function fetchMessages() {
             }
         }
 
-        // Chốt lại kênh hiện tại để so sánh cho vòng lặp 1 giây tiếp theo
         lastRenderedChannel = currentChannel;
 
         if (hasNewMsgInActiveChannel) {
@@ -121,20 +114,17 @@ async function fetchMessages() {
 //     box.innerHTML = "";
     
 //     messages.forEach(msg => {
-//         // LOGIC CANH LỀ: Nếu tên người gửi trùng với tên mình thì gắn class "mine"
 //         const isMine = (msg.from === myInfo.username);
         
 //         const msgDiv = document.createElement("div");
 //         msgDiv.className = `msg ${isMine ? "mine" : ""}`;
         
-//         // Tên hiển thị: Mình thì ghi "Tôi", người khác thì in tên họ ra
 //         const displayName = isMine ? 'Tôi' : msg.from;
         
 //         msgDiv.innerHTML = `<div class="msg-info">${displayName} - ${msg.timestamp}</div>${msg.text}`;
 //         box.appendChild(msgDiv);
 //     });
     
-//     // Luôn cuộn thanh scroll xuống vị trí dưới cùng
 //     box.scrollTop = box.scrollHeight;
 // }
 
@@ -155,19 +145,17 @@ function changeChannel(channelName) {
     currentChannel = channelName;
     document.getElementById("channelTitle").innerText = `# ${channelName}`;
     
-    // TẮT Ô ĐỎ khi người dùng click vào kênh đó (Vì đã đọc)
     let badge = document.getElementById(`badge-${channelName}`);
     if (badge) {
         badge.style.display = "none";
         badge.innerText = "0";
     }
     
-    // Cập nhật UI menu bên trái
     const items = document.querySelectorAll("#channelList li");
     items.forEach(li => li.classList.remove("active"));
     document.getElementById(`tab-${channelName}`).classList.add("active");
     
-    fetchMessages(); // Tải tin nhắn của kênh mới ngay lập tức
+    fetchMessages();
 }
 
 // ==========================================
@@ -176,9 +164,8 @@ function changeChannel(channelName) {
 async function sendMessage() {
     const input = document.getElementById("msgInput");
     const text = input.value.trim();
-    if (!text) return; // Không cho gửi tin nhắn trống
+    if (!text) return; 
     
-    // Gói tin cần gửi
     const payload = {
         sender: myInfo.username,
         message: text,
@@ -186,9 +173,8 @@ async function sendMessage() {
         timestamp: new Date().toLocaleTimeString()
     };
 
-    // BƯỚC 1: Bắn trực tiếp qua HTTP POST tới các máy khác (Peer-to-Peer Paradigm)
     for (const [user, info] of Object.entries(activePeers)) {
-        if (user === myInfo.username) continue; // Bỏ qua, không tự bắn qua mạng cho chính mình
+        if (user === myInfo.username) continue;
 
         fetch(`http://${info.ip}:${info.port}/send-peer`, {
             method: 'POST',
@@ -197,14 +183,12 @@ async function sendMessage() {
         }).catch(e => console.log(`Lỗi gửi P2P tới ${user}`));
     }
 
-    // BƯỚC 2: Bắn ngược vào backend máy mình để tự lưu lịch sử và hiển thị
     fetch(`http://127.0.0.1:${myInfo.port}/send-peer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     }).catch(e => console.log("Lỗi lưu tin nhắn nội bộ"));
 
-    // Xóa trắng ô nhập liệu và ép giao diện cập nhật ngay lập tức
     input.value = "";
-    setTimeout(fetchMessages, 200); // Chờ 0.2s cho backend lưu xong rồi lấy hiển thị lên
+    setTimeout(fetchMessages, 200);
 }
