@@ -26,6 +26,7 @@ from .dictionary import CaseInsensitiveDict
 
 import asyncio
 import inspect
+import json
 
 class HttpAdapter:
     """
@@ -197,44 +198,83 @@ class HttpAdapter:
 
     async def handle_client_coroutine(self, reader, writer):
         """
-        Handle an incoming client connection using stream reader writer asynchronously.
+        Handle an incoming client connection using stream reader/writer asynchronously.
 
         This method reads the request from the socket, prepares the request object,
         invokes the appropriate route handler if available, builds the response,
         and sends it back to the client.
-
-        :param conn (socket): The client socket connection.
-        :param addr (tuple): The client's address.
-        :param routes (dict): The route mapping for dispatching requests.
         """
-        # Request handler
-        req = self.request
-        # Response handler
-        resp = self.response
+        try:
+            request_data = b""
+            while b"\r\n\r\n" not in request_data:
+                chunk = await reader.read(1024)
+                if not chunk:
+                    break
+                request_data += chunk
 
-        print("[HttpAdapter] Invoke handle_client_coroutine connection {})".format(addr))
-        addr = writer.get_extra_info("peername")
+            if not request_data:
+                writer.close()
+                await writer.wait_closed()
+                return
 
-        # TODO Handle the request asynchronously
-        msg = await reader.read(1024)
+            headers_part, temp_body = request_data.split(b"\r\n\r\n", 1)
+            headers_str = headers_part.decode('utf-8', errors='ignore')
+            content_length = 0
+            for line in headers_str.split('\r\n'):
+                if line.lower().startswith('content-length:'):
+                    try:
+                        content_length = int(line.split(':', 1)[1].strip())
+                    except ValueError:
+                        content_length = 0
 
+            body_data = temp_body
+            while len(body_data) < content_length:
+                chunk = await reader.read(4096)
+                if not chunk:
+                    break
+                body_data += chunk
 
-        req.prepare(msg.decode("utf-8"), routes={})
+            full_request_str = headers_str + "\r\n\r\n" + body_data.decode('utf-8', errors='ignore')
+            self.routes = self.routes or {}
+            self.request.prepare(full_request_str, self.routes)
 
-        # Handle request hook
-        if req.hook:
-            #
-            # TODO: handle for App hook here
-            #
-            response = ""
+            if hasattr(self.request, 'hook') and self.request.hook:
+                method = str(self.request.method).upper().strip()
+                if method == 'OPTIONS':
+                    response_dict = ""
+                else:
+                    safe_body = body_data.decode('utf-8', errors='ignore')
+                    response_dict = self.request.hook(self.request.headers, safe_body)
 
-        # Build response
-        #print("[HttpAdapter] Start **ASYNC** build_response with type {}".format(type(req)))
-        response = resp.build_response(req)
+                if isinstance(response_dict, dict):
+                    body_str = json.dumps(response_dict)
+                    content_type = "application/json"
+                else:
+                    body_str = str(response_dict)
+                    content_type = "text/html" if "<html" in body_str else "text/plain"
 
-        # Send all the response asynchronously
-        writer.write(response)
-        await writer.drain()
+                body_bytes = body_str.encode('utf-8')
+                res_headers = [
+                    "HTTP/1.1 200 OK",
+                    f"Content-Type: {content_type}; charset=utf-8",
+                    f"Content-Length: {len(body_bytes)}",
+                    "Access-Control-Allow-Origin: *",
+                    "Access-Control-Allow-Methods: POST, GET, OPTIONS",
+                    "Access-Control-Allow-Headers: Content-Type",
+                    "Connection: close",
+                    "\r\n"
+                ]
+                response_data = ("\r\n".join(res_headers)).encode('utf-8') + body_bytes
+            else:
+                response_data = b"HTTP/1.1 404 Not Found\r\n\r\n404 Not Found"
+
+            writer.write(response_data)
+            await writer.drain()
+        except Exception as e:
+            print(f"[HttpAdapter] Async error: {e}")
+        finally:
+            writer.close()
+            await writer.wait_closed()
 
     @property
     def extract_cookies(self, req, resp):
@@ -358,13 +398,14 @@ class HttpAdapter:
         """
         headers = {}
         #
-        # TODO: build your authentication here
-        #       username, password =...
-        # we provide dummy auth here
+        # Build proxy authentication
         #
-        username, password = ("user1", "password")
+        username, password = ("user1", "password")  # Replace with actual credentials or config
 
-        if username:
-            headers["Proxy-Authorization"] = (username, password)
+        if username and password:
+            import base64
+            auth_string = f"{username}:{password}"
+            encoded_auth = base64.b64encode(auth_string.encode('utf-8')).decode('utf-8')
+            headers["Proxy-Authorization"] = f"Basic {encoded_auth}"
 
         return headers

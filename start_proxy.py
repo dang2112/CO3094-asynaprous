@@ -81,18 +81,11 @@ def parse_virtual_hosts(config_file):
             dist_policy_map = 'round-robin'
             
         #
-        # @bksysnet: Build the mapping and policy
-        # TODO: this policy varies among scenarios 
-        #       the default policy is provided with one proxy_pass
-        #       In the multi alternatives of proxy_pass then
-        #       the policy is applied to identify the highes matching
-        #       proxy_pass
+        # Policy handling implemented in proxy.py resolve_routing_policy
+        # Supports round-robin for load balancing
         #
         if len(proxy_map.get(host,[])) == 1:
             routes[host] = (proxy_map.get(host,[])[0], dist_policy_map)
-        # esle if:
-        #         TODO:  apply further policy matching here
-        #
         else:
             routes[host] = (proxy_map.get(host,[]), dist_policy_map)
 

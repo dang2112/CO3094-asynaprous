@@ -288,10 +288,6 @@ class Response():
                 "Content-Type": "{}".format(self.headers['Content-Type']),
                 "Content-Length": "{}".format(len(self._content)),
         #       "Cookie": "{}".format(reqhdr.get("Cookie", "sessionid=xyz789")), #dummy cooki
-        #
-        # TODO prepare the request authentication
-        #
-        #       self.auth = ...
                 "Date": "{}".format(datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")),
                 "Max-Forward": "10",
                 "Pragma": "no-cache",
@@ -299,6 +295,13 @@ class Response():
                 "Warning": "199 Miscellaneous warning",
                 "User-Agent": "{}".format(reqhdr.get("User-Agent", "Chrome/123.0.0.0")),
             }
+
+        # Prepare authentication headers
+        if request.auth is None:
+            headers["WWW-Authenticate"] = "Basic realm=\"AsynApRous\""
+        else:
+            # If auth is present, echo it or validate (placeholder)
+            pass
 
         # Header text alignment
             #

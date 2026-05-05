@@ -194,30 +194,45 @@ class Request():
         return
 
     def prepare_body(self, data, files, json=None):
-        self.prepare_content_length(self.body)
-        self.body = body
-        #
-        # TODO prepare the request authentication
-        #
-	# self.auth = ...
+        self.prepare_content_length(data)
+        self.body = data
+        # Authentication is handled in prepare() method
         return
 
 
     def prepare_content_length(self, body):
-        self.headers["Content-Length"] = "0"
-        #
-        # TODO prepare the request authentication
-        #
-	# self.auth = ...
+        self.headers["Content-Length"] = str(len(body) if body else 0)
+        # Authentication is handled in prepare() method
         return
 
 
     def prepare_auth(self, auth, url=""):
-        #
-        # TODO prepare the request authentication
-        #
-	# self.auth = ...
-        return
+        """
+        Prepares authentication credentials from the Authorization header.
+
+        Supports Basic Auth (username:password) and Bearer tokens.
+
+        :param auth (str): The Authorization header value.
+        :param url (str): Optional URL for context.
+        :rtype: tuple or str: (username, password) for Basic, or token for Bearer.
+        """
+        if not auth:
+            self.auth = None
+            return
+
+        try:
+            auth_type, auth_value = auth.split(' ', 1)
+            if auth_type.lower() == 'basic':
+                import base64
+                decoded = base64.b64decode(auth_value).decode('utf-8')
+                username, password = decoded.split(':', 1)
+                self.auth = (username, password)
+            elif auth_type.lower() == 'bearer':
+                self.auth = auth_value  # token
+            else:
+                self.auth = None
+        except Exception:
+            self.auth = None
 
     def prepare_cookies(self, cookies):
             self.headers["Cookie"] = cookies
