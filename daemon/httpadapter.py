@@ -198,7 +198,7 @@ class HttpAdapter:
 
     async def handle_client_coroutine(self, reader, writer):
         """
-        Handle an incoming client connection using stream reader/writer asynchronously.
+        Handle an incoming client connection using stream reader writer asynchronously.
 
         This method reads the request from the socket, prepares the request object,
         invokes the appropriate route handler if available, builds the response,
