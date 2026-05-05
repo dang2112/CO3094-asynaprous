@@ -18,6 +18,9 @@
         .unread-badge { background-color: #e74c3c; color: white; border-radius: 12px; padding: 2px 8px; font-size: 12px; font-weight: bold; display: none; }
         .sidebar li:hover { background: #34495e; }
         .sidebar li.active { background: #3498db; font-weight: bold; }
+        .peer-item.selected-peer { background: #3c8dbc; }
+        .peer-item { cursor: pointer; }
+        .self-peer { cursor: default; opacity: 0.8; }
         
         .chat-area { flex: 1; display: flex; flex-direction: column; background: #fff; }
         .chat-header { padding: 15px 20px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; background: #fafafa;}
@@ -65,6 +68,9 @@
         </ul>
         <h3>🟢 Đang Online</h3>
         <ul id="peerList"></ul>
+        <div id="selectedPeerInfo" style="padding: 10px 15px; color: #f1f1f1; font-size: 14px;">
+            Chưa chọn peer trực tiếp.
+        </div>
     </div>
 
     <div class="chat-area">
@@ -78,7 +84,8 @@
         <div class="messages" id="messagesBox"></div>
         <div class="input-area">
             <input type="text" id="msgInput" placeholder="Nhập tin nhắn..." onkeypress="if(event.key === 'Enter') sendMessage()">
-            <button onclick="sendMessage()">Gửi</button>
+            <button onclick="sendMessage()">Gửi trực tiếp</button>
+            <button onclick="sendBroadcast()">Broadcast</button>
         </div>
     </div>
 

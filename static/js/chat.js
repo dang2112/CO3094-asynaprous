@@ -5,6 +5,7 @@ let myInfo = { username: "", ip: "", port: "" };
 let trackerUrl = "http://127.0.0.1:8000"; // Địa chỉ Server Trung Tâm (Tracker)
 let activePeers = {};
 let currentChannel = "general";
+let selectedPeer = null;
 let channelReadCounts = { "general": 0, "study-group": 0 };
 let lastRenderedChannel = "";
 
@@ -55,8 +56,13 @@ async function fetchPeers() {
         const list = document.getElementById("peerList");
         list.innerHTML = "";
         for (const [user, info] of Object.entries(activePeers)) {
-            list.innerHTML += `<li>🟢 ${user} (${info.ip}:${info.port})</li>`;
+            const isSelf = user === myInfo.username;
+            const itemClass = isSelf ? 'self-peer' : 'peer-item';
+            const displayName = isSelf ? `${user} (Bạn)` : `${user} (${info.ip}:${info.port})`;
+            const clickAttr = isSelf ? '' : `onclick="selectPeer('${user}')"`;
+            list.innerHTML += `<li class="${itemClass}" ${clickAttr} id="peer-${user}">${displayName}</li>`;
         }
+        updateSelectedPeerInfo();
     } catch(e) {
         console.log("Đang mất kết nối với Tracker...");
     }
@@ -158,13 +164,36 @@ function changeChannel(channelName) {
     fetchMessages();
 }
 
+function updateSelectedPeerInfo() {
+    const infoBox = document.getElementById('selectedPeerInfo');
+    if (!infoBox) return;
+
+    if (selectedPeer) {
+        infoBox.innerText = `Đang gửi trực tiếp tới: ${selectedPeer}`;
+    } else {
+        infoBox.innerText = 'Chưa chọn peer trực tiếp.';
+    }
+}
+
+function selectPeer(user) {
+    selectedPeer = user;
+    document.querySelectorAll('.peer-item').forEach(li => li.classList.remove('selected-peer'));
+    const selected = document.getElementById(`peer-${user}`);
+    if (selected) selected.classList.add('selected-peer');
+    updateSelectedPeerInfo();
+}
+
 // ==========================================
-// 4. GỬI TIN NHẮN (P2P BROADCAST)
+// 4. GỬI TIN NHẮN (P2P DIRECT / BROADCAST)
 // ==========================================
 async function sendMessage() {
     const input = document.getElementById("msgInput");
     const text = input.value.trim();
-    if (!text) return; 
+    if (!text) return;
+    if (!selectedPeer) {
+        alert('Vui lòng chọn một peer để gửi trực tiếp, hoặc nhấn Broadcast.');
+        return;
+    }
     
     const payload = {
         sender: myInfo.username,
@@ -173,21 +202,61 @@ async function sendMessage() {
         timestamp: new Date().toLocaleTimeString()
     };
 
-    for (const [user, info] of Object.entries(activePeers)) {
-        if (user === myInfo.username) continue;
+    const peerInfo = activePeers[selectedPeer];
+    if (!peerInfo) {
+        alert('Peer đã chọn không tồn tại. Vui lòng chọn lại.');
+        return;
+    }
 
-        fetch(`http://${info.ip}:${info.port}/send-peer`, {
+    try {
+        await fetch(`http://${peerInfo.ip}:${peerInfo.port}/send-peer`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
-        }).catch(e => console.log(`Lỗi gửi P2P tới ${user}`));
+        });
+    } catch (e) {
+        console.log(`Lỗi gửi trực tiếp tới ${selectedPeer}:`, e);
     }
 
-    fetch(`http://127.0.0.1:${myInfo.port}/send-peer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    }).catch(e => console.log("Lỗi lưu tin nhắn nội bộ"));
+    try {
+        await fetch(`http://127.0.0.1:${myInfo.port}/send-peer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    } catch (e) {
+        console.log("Lỗi lưu tin nhắn nội bộ", e);
+    }
+
+    input.value = "";
+    setTimeout(fetchMessages, 200);
+}
+
+async function sendBroadcast() {
+    const input = document.getElementById("msgInput");
+    const text = input.value.trim();
+    if (!text) return;
+
+    const payload = {
+        sender: myInfo.username,
+        message: text,
+        channel: currentChannel,
+        timestamp: new Date().toLocaleTimeString()
+    };
+
+    try {
+        const res = await fetch(`http://127.0.0.1:${myInfo.port}/broadcast`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            console.log('Broadcast failed', res.status);
+        }
+    } catch (e) {
+        console.log('Lỗi broadcast:', e);
+    }
 
     input.value = "";
     setTimeout(fetchMessages, 200);

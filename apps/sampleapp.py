@@ -79,6 +79,7 @@
 
 import json
 import os
+import http.client
 from daemon.asynaprous import AsynapRous
 
 app = AsynapRous()
@@ -95,6 +96,24 @@ def parse_body(body):
     except Exception as e:
         print(f"❌ [CẢNH BÁO] Lỗi đọc JSON: {e}. Dữ liệu gốc: {body}")
         return {}
+
+
+def send_message_to_peer(ip, port, payload):
+    try:
+        conn = http.client.HTTPConnection(ip, int(port), timeout=3)
+        body = json.dumps(payload)
+        conn.request('POST', '/send-peer', body=body, headers={'Content-Type': 'application/json'})
+        response = conn.getresponse()
+        text = response.read().decode('utf-8', errors='ignore')
+        conn.close()
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            parsed = text
+        return True, {'status': response.status, 'body': parsed}
+    except Exception as e:
+        return False, str(e)
+
 
 @app.route('/chat.html', methods=['GET'])
 def serve_ui(headers, body):
@@ -133,6 +152,53 @@ def send_peer(headers, body):
         "timestamp": data.get('timestamp', '')
     })
     return {"msg": "Đã nhận"}
+
+
+@app.route('/broadcast', methods=['POST', 'OPTIONS'])
+def broadcast(headers, body):
+    data = parse_body(body)
+    if not data: return {"msg": "Preflight OK"}
+
+    sender = data.get('sender', 'Unknown')
+    message = data.get('message', '')
+    channel = data.get('channel', 'general')
+    timestamp = data.get('timestamp') or ''
+
+    if not message:
+        return {"error": "Missing message"}
+
+    payload = {
+        'sender': sender,
+        'message': message,
+        'channel': channel,
+        'timestamp': timestamp
+    }
+
+    results = {}
+    for peer_name, peer_info in active_peers.items():
+        if peer_name == sender:
+            continue
+        ok, result = send_message_to_peer(peer_info['ip'], peer_info['port'], payload)
+        results[peer_name] = {
+            'ok': ok,
+            'detail': result
+        }
+
+    # Save the broadcast locally as well
+    if channel not in chat_channels:
+        chat_channels[channel] = []
+    chat_channels[channel].append({
+        'from': sender,
+        'text': message,
+        'timestamp': timestamp
+    })
+
+    return {
+        'msg': 'Broadcast sent',
+        'broadcasted_to': len(results),
+        'results': results
+    }
+
 
 @app.route('/get-messages', methods=['GET', 'OPTIONS'])
 def get_messages(headers, body):
