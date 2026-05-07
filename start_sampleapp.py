@@ -24,9 +24,8 @@ HTTP requests. The application includes a login endpoint and a greeting endpoint
 and can be configured via command-line arguments.
 """
 
-import json
-import socket
 import argparse
+import daemon.backend as backend_module
 
 from apps import create_sampleapp
 
@@ -37,10 +36,26 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='Backend', description='', epilog='Beckend daemon')
     parser.add_argument('--server-ip', default='0.0.0.0')
     parser.add_argument('--server-port', type=int, default=PORT)
+    parser.add_argument('--role', choices=['tracker', 'peer'], default=None,
+                        help='Start this process as a tracker or a peer node')
+    parser.add_argument('--tracker-ip', default='127.0.0.1',
+                        help='Tracker IP for peer auth verification and coordination')
+    parser.add_argument('--tracker-port', type=int, default=8000,
+                        help='Tracker port for peer auth verification and coordination')
+    parser.add_argument('--async-mode', choices=['threading', 'callback', 'coroutine'], default='threading',
+                        help='Backend communication mode')
  
     args = parser.parse_args()
     ip = args.server_ip
     port = args.server_port
+    role = args.role if args.role else ('tracker' if port == 8000 else 'peer')
+    backend_module.mode_async = args.async_mode
 
     # Prepare and launch the RESTful application
-    create_sampleapp(ip, port)
+    create_sampleapp(
+        ip,
+        port,
+        run_role=role,
+        tracker_ip=args.tracker_ip,
+        tracker_port_value=args.tracker_port,
+    )

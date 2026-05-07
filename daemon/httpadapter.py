@@ -28,6 +28,19 @@ import asyncio
 import inspect
 import json
 
+
+HTTP_STATUS_TEXT = {
+    200: "OK",
+    201: "Created",
+    400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "Not Found",
+    409: "Conflict",
+    500: "Internal Server Error",
+    503: "Service Unavailable",
+}
+
 class HttpAdapter:
     """
     A mutable :class:`HTTP adapter <HTTP adapter>` for managing client connections
@@ -159,34 +172,29 @@ class HttpAdapter:
             # Thực thi Hook (Gọi API)
             if hasattr(self.request, 'hook') and self.request.hook:
                 method = str(self.request.method).upper().strip()
+                status_code = 200
                 if method == 'OPTIONS':
                     response_dict = ""
                 else:
                     #Bỏ qua Body của Framework, tự tay ép Body chuẩn vào hàm!
                     safe_body = body_data.decode('utf-8', errors='ignore')
                     response_dict = self.request.hook(self.request.headers, safe_body)
-                
-                # Đóng gói Response
-                if isinstance(response_dict, dict):
+
+                if isinstance(response_dict, tuple) and len(response_dict) == 2:
+                    status_code, response_dict = response_dict
+
+                if isinstance(response_dict, bytes):
+                    if response_dict.startswith(b"HTTP/"):
+                        response_data = response_dict
+                    else:
+                        response_data = self._build_http_response(status_code, response_dict, "application/octet-stream")
+                elif isinstance(response_dict, dict):
                     body_str = json.dumps(response_dict)
-                    content_type = "application/json"
+                    response_data = self._build_http_response(status_code, body_str.encode('utf-8'), "application/json")
                 else:
                     body_str = str(response_dict)
                     content_type = "text/html" if "<html" in body_str else "text/plain"
-
-                body_bytes = body_str.encode('utf-8')
-                res_headers = [
-                    "HTTP/1.1 200 OK",
-                    f"Content-Type: {content_type}; charset=utf-8",
-                    f"Content-Length: {len(body_bytes)}",
-                    "Access-Control-Allow-Origin: *",
-                    "Access-Control-Allow-Methods: POST, GET, OPTIONS",
-                    "Access-Control-Allow-Headers: Content-Type",
-                    "Connection: close",
-                    "\r\n"
-                ]
-                
-                response_data = ("\r\n".join(res_headers)).encode('utf-8') + body_bytes
+                    response_data = self._build_http_response(status_code, body_str.encode('utf-8'), content_type)
             else:
                 response_data = b"HTTP/1.1 404 Not Found\r\n\r\n404 Not Found"
 
@@ -240,31 +248,28 @@ class HttpAdapter:
 
             if hasattr(self.request, 'hook') and self.request.hook:
                 method = str(self.request.method).upper().strip()
+                status_code = 200
                 if method == 'OPTIONS':
                     response_dict = ""
                 else:
                     safe_body = body_data.decode('utf-8', errors='ignore')
                     response_dict = self.request.hook(self.request.headers, safe_body)
 
-                if isinstance(response_dict, dict):
+                if isinstance(response_dict, tuple) and len(response_dict) == 2:
+                    status_code, response_dict = response_dict
+
+                if isinstance(response_dict, bytes):
+                    if response_dict.startswith(b"HTTP/"):
+                        response_data = response_dict
+                    else:
+                        response_data = self._build_http_response(status_code, response_dict, "application/octet-stream")
+                elif isinstance(response_dict, dict):
                     body_str = json.dumps(response_dict)
-                    content_type = "application/json"
+                    response_data = self._build_http_response(status_code, body_str.encode('utf-8'), "application/json")
                 else:
                     body_str = str(response_dict)
                     content_type = "text/html" if "<html" in body_str else "text/plain"
-
-                body_bytes = body_str.encode('utf-8')
-                res_headers = [
-                    "HTTP/1.1 200 OK",
-                    f"Content-Type: {content_type}; charset=utf-8",
-                    f"Content-Length: {len(body_bytes)}",
-                    "Access-Control-Allow-Origin: *",
-                    "Access-Control-Allow-Methods: POST, GET, OPTIONS",
-                    "Access-Control-Allow-Headers: Content-Type",
-                    "Connection: close",
-                    "\r\n"
-                ]
-                response_data = ("\r\n".join(res_headers)).encode('utf-8') + body_bytes
+                    response_data = self._build_http_response(status_code, body_str.encode('utf-8'), content_type)
             else:
                 response_data = b"HTTP/1.1 404 Not Found\r\n\r\n404 Not Found"
 
@@ -275,6 +280,20 @@ class HttpAdapter:
         finally:
             writer.close()
             await writer.wait_closed()
+
+    def _build_http_response(self, status_code, body_bytes, content_type):
+        reason = HTTP_STATUS_TEXT.get(status_code, "OK")
+        res_headers = [
+            f"HTTP/1.1 {status_code} {reason}",
+            f"Content-Type: {content_type}; charset=utf-8",
+            f"Content-Length: {len(body_bytes)}",
+            "Access-Control-Allow-Origin: *",
+            "Access-Control-Allow-Methods: POST, GET, OPTIONS",
+            "Access-Control-Allow-Headers: Content-Type, Authorization",
+            "Connection: close",
+            "\r\n"
+        ]
+        return ("\r\n".join(res_headers)).encode('utf-8') + body_bytes
 
     @property
     def extract_cookies(self, req, resp):

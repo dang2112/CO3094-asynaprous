@@ -173,6 +173,9 @@ def run_backend(ip, port, routes):
                     if key.data is None:
                         try:
                             conn, addr = server.accept()
+                            # Accepted sockets inherit non-blocking mode on some platforms.
+                            # The current HTTP adapter expects blocking reads for a full request.
+                            conn.setblocking(True)
                             handle_client_callback(server, ip, port, conn, addr, routes)
                         except BlockingIOError:
                             pass

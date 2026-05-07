@@ -43,9 +43,11 @@
         <div class="modal-box">
             <h2 style="margin-top: 0; text-align: center;">Vào Chat P2P</h2>
             <input type="text" id="username" placeholder="Tên của bạn...">
+            <input type="password" id="password" placeholder="Mật khẩu...">
             <input type="text" id="myIp" value="127.0.0.1" placeholder="IP của bạn">
             <input type="text" id="myPort" placeholder="Cổng đang chạy (VD: 9001)">
             <button onclick="login()">Đăng nhập</button>
+            <button onclick="register()" style="background: #2196F3; margin-top: 10px;">Đăng ký tài khoản mới</button>
         </div>
     </div>
 
@@ -61,15 +63,27 @@
                 <span># general</span>
                 <span class="unread-badge" id="badge-general">0</span>
             </li>
-            <li onclick="changeChannel('study-group')" id="tab-study-group">
-                <span># study-group</span>
-                <span class="unread-badge" id="badge-study-group">0</span>
-            </li>
         </ul>
-        <h3>🟢 Đang Online</h3>
+        <div style="padding: 10px 15px;">
+            <input type="text" id="newChannelName" placeholder="Tên kênh mới..." style="width: 100%; padding: 5px; margin-bottom: 5px;">
+            <button onclick="createChannel()" style="width: 100%; padding: 5px; background: #4CAF50; color: white; border: none; cursor: pointer;">Tạo kênh</button>
+        </div>
+        <h3>👥 Danh sách Peers (Trực tiếp)</h3>
         <ul id="peerList"></ul>
+        <h3>👥 Thành viên kênh</h3>
+        <ul id="channelMembersList"></ul>
+        <div style="padding: 10px 15px;">
+            <select id="addMemberSelect" style="width: 70%; padding: 5px; margin-bottom: 5px;">
+                <option value="">Chọn peer để thêm...</option>
+            </select>
+            <button onclick="addMemberToChannel()" style="width: 25%; padding: 5px; background: #2196F3; color: white; border: none; cursor: pointer;">Thêm</button>
+            <button onclick="refreshChannels()" style="width: 25%; padding: 5px; background: #FF9800; color: white; border: none; cursor: pointer; margin-left: 5px;" title="Refresh channel list">↻</button>
+        </div>
         <div id="selectedPeerInfo" style="padding: 10px 15px; color: #f1f1f1; font-size: 14px;">
             Chưa chọn peer trực tiếp.
+        </div>
+        <div id="authInfo" style="padding: 10px 15px; color: #f1f1f1; font-size: 12px; border-top: 1px solid #34495e; margin-top: 10px;">
+            🔐 Auth: <span id="authType">None</span>
         </div>
     </div>
 
@@ -79,6 +93,7 @@
             <div style="display: flex; gap: 15px; align-items: center;">
                 <span id="notifyBadge" class="notification">🔔 Có tin nhắn mới!</span>
                 <span id="userInfo" style="color: #555;"></span>
+                <button onclick="logout()" style="padding: 5px 10px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Đăng xuất</button>
             </div>
         </div>
         <div class="messages" id="messagesBox"></div>
