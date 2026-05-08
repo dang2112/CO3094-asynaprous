@@ -45,13 +45,55 @@ PROXY_PASS = {
 round_robin_counter = {}
 
 
+def recv_http_request(conn):
+    """Read a full HTTP request from the client socket."""
+    request_data = b""
+
+    while b"\r\n\r\n" not in request_data:
+        chunk = conn.recv(4096)
+        if not chunk:
+            break
+        request_data += chunk
+
+    if not request_data:
+        return b""
+
+    headers_part, body_part = request_data.split(b"\r\n\r\n", 1)
+    headers_str = headers_part.decode("utf-8", errors="ignore")
+    content_length = 0
+
+    for line in headers_str.split("\r\n"):
+        if line.lower().startswith("content-length:"):
+            try:
+                content_length = int(line.split(":", 1)[1].strip())
+            except ValueError:
+                content_length = 0
+            break
+
+    while len(body_part) < content_length:
+        chunk = conn.recv(4096)
+        if not chunk:
+            break
+        body_part += chunk
+
+    return headers_part + b"\r\n\r\n" + body_part
+
+
+def extract_hostname(request_text):
+    """Extract the Host header from a raw HTTP request string."""
+    for line in request_text.splitlines():
+        if line.lower().startswith("host:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
 def forward_request(host, port, request):
     """
     Forwards an HTTP request to a backend server and retrieves the response.
 
     :params host (str): IP address of the backend server.
     :params port (int): port number of the backend server.
-    :params request (str): incoming HTTP request.
+    :params request (bytes): incoming HTTP request.
 
     :rtype bytes: Raw HTTP response from the backend server. If the connection
                   fails, returns a 404 Not Found response.
@@ -61,7 +103,7 @@ def forward_request(host, port, request):
 
     try:
         backend.connect((host, port))
-        backend.sendall(request.encode())
+        backend.sendall(request)
         response = b""
         while True:
             chunk = backend.recv(4096)
@@ -144,12 +186,27 @@ def handle_client(ip, port, conn, addr, routes):
     :params routes (dict): dictionary mapping hostnames and location.
     """
 
-    request = conn.recv(1024).decode()
+    request = recv_http_request(conn)
+    if not request:
+        conn.close()
+        return
+
+    request_text = request.decode("utf-8", errors="ignore")
 
     # Extract hostname
-    for line in request.splitlines():
-        if line.lower().startswith('host:'):
-            hostname = line.split(':', 1)[1].strip()
+    hostname = extract_hostname(request_text)
+    if not hostname:
+        response = (
+            "HTTP/1.1 400 Bad Request\r\n"
+            "Content-Type: text/plain\r\n"
+            "Content-Length: 16\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+            "400 Bad Request"
+        ).encode('utf-8')
+        conn.sendall(response)
+        conn.close()
+        return
 
     print("[Proxy] {} at Host: {}".format(addr, hostname))
 

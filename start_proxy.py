@@ -109,11 +109,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='Proxy', description='', epilog='Proxy daemon')
     parser.add_argument('--server-ip', default='0.0.0.0')
     parser.add_argument('--server-port', type=int, default=PROXY_PORT)
+    parser.add_argument('--config', default='config/proxy.conf',
+                        help='Path to proxy routing configuration file')
  
     args = parser.parse_args()
     ip = args.server_ip
     port = args.server_port
 
-    routes = parse_virtual_hosts("config/proxy.conf")
+    routes = parse_virtual_hosts(args.config)
 
     create_proxy(ip, port, routes)
